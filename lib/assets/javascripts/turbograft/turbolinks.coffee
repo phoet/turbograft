@@ -119,11 +119,12 @@ class window.Turbolinks
     options.updatePushState ?= true
 
     if doc = processResponse(xhr, options.partialReplace)
-      reflectNewUrl url if options.updatePushState
-      nodes = changePage(extractTitleAndBody(doc)..., options)
-      reflectRedirectedUrl(xhr) if options.updatePushState
-      triggerEvent 'page:load', nodes
-      options.onLoadFunction?()
+      document.addEventListener 'DOMContentLoaded', () =>
+        reflectNewUrl url if options.updatePushState
+        nodes = changePage(extractTitleAndBody(doc)..., options)
+        reflectRedirectedUrl(xhr) if options.updatePushState
+        triggerEvent 'page:load', nodes
+        options.onLoadFunction?()
     else
       document.location.href = url.absolute
 
