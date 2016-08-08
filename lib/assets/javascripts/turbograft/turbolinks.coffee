@@ -306,7 +306,8 @@ class window.Turbolinks
       xhr.getResponseHeader('Content-Type').match /^(?:text\/html|application\/xhtml\+xml|application\/xml)(?:;|$)/
 
     extractTrackAssets = (doc) ->
-      doc.querySelector('head').childNodes.filter (node) -> node.getAttribute?('data-turbolinks-track')?
+      for node in doc.querySelector('head').childNodes when node.getAttribute?('data-turbolinks-track')?
+        node
 
     updateAssets = (doc) ->
       loadedAssets ||= extractTrackAssets document
