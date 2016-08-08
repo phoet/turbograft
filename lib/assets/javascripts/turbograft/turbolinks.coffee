@@ -118,15 +118,12 @@ class window.Turbolinks
     triggerEvent 'page:receive'
     options.updatePushState ?= true
 
-    if doc = processResponse(xhr, options.partialReplace)
-      document.addEventListener 'DOMContentLoaded', () =>
-        reflectNewUrl url if options.updatePushState
-        nodes = changePage(extractTitleAndBody(doc)..., options)
-        reflectRedirectedUrl(xhr) if options.updatePushState
-        triggerEvent 'page:load', nodes
-        options.onLoadFunction?()
-    else
-      document.location.href = url.absolute
+    doc = processResponse(xhr, options.partialReplace)
+    reflectNewUrl url if options.updatePushState
+    nodes = changePage(extractTitleAndBody(doc)..., options)
+    reflectRedirectedUrl(xhr) if options.updatePushState
+    triggerEvent 'page:load', nodes
+    options.onLoadFunction?()
 
     return
 
@@ -309,24 +306,31 @@ class window.Turbolinks
       xhr.getResponseHeader('Content-Type').match /^(?:text\/html|application\/xhtml\+xml|application\/xml)(?:;|$)/
 
     extractTrackAssets = (doc) ->
-      for node in doc.querySelector('head').childNodes when node.getAttribute?('data-turbolinks-track')?
-        node.getAttribute('src') or node.getAttribute('href')
+      doc.querySelector('head').childNodes.filter (node) -> node.getAttribute?('data-turbolinks-track')?
 
-    assetsChanged = (doc) ->
+    updateAssets = (doc) ->
       loadedAssets ||= extractTrackAssets document
       fetchedAssets  = extractTrackAssets doc
-      fetchedAssets.length isnt loadedAssets.length or intersection(fetchedAssets, loadedAssets).length isnt loadedAssets.length
+      commonAssets = intersection(fetchedAssets, loadedAssets)
+      additions = difference(fetchedAssets, commonAssets)
+      removals = difference(loadedAssets, commonAssets)
+
+      head = document.querySelector('head')
+      for asset in additions
+        head.appendChild(asset)
 
     intersection = (a, b) ->
       [a, b] = [b, a] if a.length > b.length
       value for value in a when value in b
 
+    difference = (a, b) ->
+      [a, b] = [b, a] if a.length > b.length
+      value for value in a when value not in b
+
     if !clientOrServerError() && validContent()
       doc = createDocument xhr.responseText
-      changed = assetsChanged(doc)
-
-      if doc && (!changed || partial)
-        return doc
+      updateAssets(doc)
+      return doc
 
   extractTitleAndBody = (doc) ->
     title = doc.querySelector 'title'
