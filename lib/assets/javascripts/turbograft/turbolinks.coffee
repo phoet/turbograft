@@ -310,23 +310,42 @@ class window.Turbolinks
         node
 
     updateAssets = (doc) ->
-      loadedAssets ||= extractTrackAssets document
-      fetchedAssets  = extractTrackAssets doc
-      commonAssets = intersection(fetchedAssets, loadedAssets)
-      additions = difference(fetchedAssets, commonAssets)
-      removals = difference(loadedAssets, commonAssets)
+      loadedAssets = extractTrackAssets document
+      fetchedAssets = extractTrackAssets doc
+
+      scriptOperations = getScriptTagOperations(loadedAssets, fetchedAssets)
+      linkOperations = getLinkTagOperations(loadedAssets, fetchedAssets)
+
+      tagOperations = scriptOperations.concat(linkOperations)
 
       head = document.querySelector('head')
-      for asset in additions
-        head.appendChild(asset)
+      for {operation, node} in tagOperations
+        head[operation](node)
+
+    filterForNodeType = (nodeList, nodeType) ->
+      (node for node in nodeList when node.nodeName == nodeType)
+
+    getScriptTagOperations = (loadedAssets, fetchedAssets) ->
+      oldScripts = filterForNodeType(loadedAssets, 'SCRIPT')
+      oldScriptSrcList = (script.src for script in oldScripts)
+      newScripts = filterForNodeType(fetchedAssets, 'SCRIPT')
+
+      return ({node: script, operation: 'appendChild'} for script in newScripts when !(script.src in oldScriptSrcList))
+
+    getLinkTagOperations = (loadedAssets, fetchedAssets) ->
+      oldLinks = filterForNodeType(loadedAssets, 'LINK')
+      newLinks = filterForNodeType(fetchedAssets, 'LINK')
+      oldLinkHrefList = (link.href for link in oldLinks)
+      newLinkHrefList = (link.href for link in newLinks)
+
+      addOperations = ({node: link, operation: 'appendChild'} for link in newLinks when !(link.href in oldLinkHrefList))
+      removeOperations = ({node: link, operation: 'removeChild'} for link in oldLinks when !(link.href in newLinkHrefList))
+
+      return addOperations.concat(removeOperations)
 
     intersection = (a, b) ->
       [a, b] = [b, a] if a.length > b.length
       value for value in a when value in b
-
-    difference = (a, b) ->
-      [a, b] = [b, a] if a.length > b.length
-      value for value in a when value not in b
 
     if !clientOrServerError() && validContent()
       doc = createDocument xhr.responseText

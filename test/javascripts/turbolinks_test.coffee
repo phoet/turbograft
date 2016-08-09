@@ -34,6 +34,34 @@ describe 'Turbolinks', ->
     </html>
   """
 
+  html_with_script_in_head = """
+    <!doctype html>
+    <html>
+      <head>
+        <script src='merp' data-turbolinks-track="true"></script>
+        <title>Hi there!</title>
+      </head>
+      <body>
+        <div>Merp</div>
+        <div id="turbo-area" refresh="turbo-area">derp</div>
+      </body>
+    </html>
+  """
+
+  html_with_link_in_head = """
+    <!doctype html>
+    <html>
+      <head>
+        <link href='merp' data-turbolinks-track="true"></link>
+        <title>Hi there!</title>
+      </head>
+      <body>
+        <div>Merp</div>
+        <div id="turbo-area" refresh="turbo-area">derp</div>
+      </body>
+    </html>
+  """
+
   script_response = """
     <!doctype html>
     <html>
@@ -199,7 +227,7 @@ describe 'Turbolinks', ->
           assert.equal 1, nodes.length
           assert.equal 'div1', nodes[0].id
 
-        @server.respondWith([200, { "Content-Type": "text/html" }, response_with_refresh_always]);
+        @server.respondWith([200, { "Content-Type": "text/html" }, response_with_refresh_always])
 
         Page.refresh(onlyKeys: ['div1'])
         @server.respond()
@@ -208,3 +236,51 @@ describe 'Turbolinks', ->
         $(document).off 'page:load'
 
         $("#div1").remove()
+
+      it 'does not trigger a full refresh when a new script is in the head', ->
+        @server.respondWith([200, { "Content-Type": "text/html" }, html_with_script_in_head])
+
+        Turbolinks.visit "/some_request"
+        @server.respond()
+
+        assert.equal true, @pushStateStub.called, 'Should call pushState instead of redirecting.'
+
+      it 'inserts script with a new src from new doc into head on navigation', ->
+        @server.respondWith([200, { "Content-Type": "text/html" }, html_with_script_in_head])
+
+        Turbolinks.visit "/some_request"
+        @server.respond()
+
+        assert.equal true, document.querySelectorAll('script[src="merp"]').length == 1, 'Should insert the script tag!'
+
+      it 'does not reinsert script with existing src from new doc into head on navigation', ->
+        @server.respondWith([200, { "Content-Type": "text/html" }, html_with_script_in_head])
+
+        Turbolinks.visit "/some_request"
+        @server.respond()
+
+        Turbolinks.visit "/some_other_request"
+        @server.respond()
+
+        assert.equal true, document.querySelectorAll('script[src="merp"]').length == 1, 'Should insert the script tag once!'
+
+      it 'inserts link tags with a new href from new doc into head on navigation', ->
+        @server.respondWith([200, { "Content-Type": "text/html" }, html_with_link_in_head])
+
+        Turbolinks.visit "/some_request"
+        @server.respond()
+
+        assert.equal 1, document.querySelectorAll('link[href="merp"]').length, 'Should add the new link tag!'
+
+      it 'should remove link tags when navigating to a page with less of them', ->
+        @server.respondWith([200, { "Content-Type": "text/html" }, html_with_link_in_head])
+        Turbolinks.visit "/some_request"
+        @server.respond()
+
+        @server.respondWith([200, { "Content-Type": "text/html" }, html_one])
+        Turbolinks.visit "/some_other_request"
+        @server.respond()
+
+        assert.equal 0, document.querySelectorAll('link[href="merp"]').length, 'Should remove the link!'
+
+
