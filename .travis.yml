@@ -5,7 +5,7 @@ before_script:
   - sh -e /etc/init.d/xvfb start
   - bundle install
 env:
-  - DISPLAY=':99.0' RAILS_VERSION='3.2.0'
-  - DISPLAY=':99.0'  RAILS_VERSION='4.1.0'
-  - DISPLAY=':99.0'  RAILS_VERSION='4.2.0'
+  - DISPLAY=':99.0' RAILS_VERSION='4.1.0'
+  - DISPLAY=':99.0' RAILS_VERSION='4.2.0'
+  - DISPLAY=':99.0' RAILS_VERSION='5.0.0'
 script: bundle exec rake ci
