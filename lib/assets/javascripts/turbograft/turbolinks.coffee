@@ -56,6 +56,63 @@ removeNode = (node) ->
   removedNode = node.parentNode.removeChild(node)
   triggerEvent('page:after-node-removed', removedNode)
 
+updateHead = (doc) ->
+  loadedAssets = extractTrackAssets document
+  fetchedAssets = extractTrackAssets doc
+
+  updateLinkTags(loadedAssets, fetchedAssets)
+  updateScriptTags(loadedAssets, fetchedAssets)
+
+extractTrackAssets = (doc) ->
+  for node in doc.querySelector('head').childNodes when node.getAttribute?('data-turbolinks-track')?
+    node
+
+filterForNodeType = (nodeList, nodeType) ->
+  (node for node in nodeList when node.nodeName == nodeType)
+
+insertScript = (scriptNode) ->
+  newNode = scriptNode.cloneNode(deep)
+
+  deferred = $.Deferred()
+
+  onScriptLoad = ->
+    newNode.removeEventListener('load', onScriptLoad)
+    newNode.removeEventListener('error', onScriptError)
+    deferred.resolve()
+
+  onScriptError = ->
+    newNode.removeEventListener('load', onScriptLoad)
+    newNode.removeEventListener('error', onScriptError)
+    deferred.reject()
+
+  newNode.addEventListener('load', onScriptLoad)
+  newNode.addEventListener('error', onScriptError)
+
+  document.head.appendChild(newNode)
+
+  return deferred.promise()
+
+updateScriptTags = (loadedAssets, fetchedAssets) ->
+  oldScripts = filterForNodeType(loadedAssets, 'SCRIPT')
+  newScripts = filterForNodeType(fetchedAssets, 'SCRIPT')
+
+  scriptPromises = []
+
+  for script in newScripts when !(nodeInList(script, oldScripts))
+    scriptPromises.push(insertScript(script))
+
+  return $.when(scriptPromises...)
+
+updateLinkTags = (loadedAssets, fetchedAssets) ->
+  oldLinks = filterForNodeType(loadedAssets, 'LINK')
+  newLinks = filterForNodeType(fetchedAssets, 'LINK')
+  oldLinkHrefList = (link.href for link in oldLinks)
+  newLinkHrefList = (link.href for link in newLinks)
+
+  addOperations = document.head.appendChild for link in newLinks when !(link.href in oldLinkHrefList)
+  removeOperations = document.head.removeChild for link in oldLinks when !(link.href in newLinkHrefList)
+
+
 # TODO: triggerEvent should be accessible to all these guys
 # on some kind of eventbus
 # TODO: clean up everything above me ^
@@ -122,9 +179,10 @@ class window.Turbolinks
     reflectNewUrl url if options.updatePushState
     nodes = changePage(extractTitleAndBody(doc)..., options)
     reflectRedirectedUrl(xhr) if options.updatePushState
-    triggerEvent 'page:load', nodes
-    options.onLoadFunction?()
 
+    updateHead(doc).then ->
+      triggerEvent 'page:load', nodes
+      options.onLoadFunction?()
     return
 
   changePage = (title, body, csrfToken, runScripts, options = {}) ->
@@ -305,51 +363,8 @@ class window.Turbolinks
     validContent = ->
       xhr.getResponseHeader('Content-Type').match /^(?:text\/html|application\/xhtml\+xml|application\/xml)(?:;|$)/
 
-    extractTrackAssets = (doc) ->
-      for node in doc.querySelector('head').childNodes when node.getAttribute?('data-turbolinks-track')?
-        node
-
-    updateAssets = (doc) ->
-      loadedAssets = extractTrackAssets document
-      fetchedAssets = extractTrackAssets doc
-
-      scriptOperations = getScriptTagOperations(loadedAssets, fetchedAssets)
-      linkOperations = getLinkTagOperations(loadedAssets, fetchedAssets)
-
-      tagOperations = scriptOperations.concat(linkOperations)
-
-      head = document.querySelector('head')
-      for {operation, node} in tagOperations
-        head[operation](node)
-
-    filterForNodeType = (nodeList, nodeType) ->
-      (node for node in nodeList when node.nodeName == nodeType)
-
-    getScriptTagOperations = (loadedAssets, fetchedAssets) ->
-      oldScripts = filterForNodeType(loadedAssets, 'SCRIPT')
-      oldScriptSrcList = (script.src for script in oldScripts)
-      newScripts = filterForNodeType(fetchedAssets, 'SCRIPT')
-
-      return ({node: script, operation: 'appendChild'} for script in newScripts when !(script.src in oldScriptSrcList))
-
-    getLinkTagOperations = (loadedAssets, fetchedAssets) ->
-      oldLinks = filterForNodeType(loadedAssets, 'LINK')
-      newLinks = filterForNodeType(fetchedAssets, 'LINK')
-      oldLinkHrefList = (link.href for link in oldLinks)
-      newLinkHrefList = (link.href for link in newLinks)
-
-      addOperations = ({node: link, operation: 'appendChild'} for link in newLinks when !(link.href in oldLinkHrefList))
-      removeOperations = ({node: link, operation: 'removeChild'} for link in oldLinks when !(link.href in newLinkHrefList))
-
-      return addOperations.concat(removeOperations)
-
-    intersection = (a, b) ->
-      [a, b] = [b, a] if a.length > b.length
-      value for value in a when value in b
-
     if !clientOrServerError() && validContent()
       doc = createDocument xhr.responseText
-      updateAssets(doc)
       return doc
 
   extractTitleAndBody = (doc) ->
