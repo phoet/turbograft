@@ -71,7 +71,9 @@ filterForNodeType = (nodeList, nodeType) ->
   (node for node in nodeList when node.nodeName == nodeType)
 
 insertScript = (scriptNode) ->
-  newNode = scriptNode.cloneNode(deep)
+  newNode = document.createElement 'script'
+  newNode.setAttribute attr.name, attr.value for attr in scriptNode.attributes
+  newNode.appendChild document.createTextNode scriptNode.innerHTML
 
   deferred = $.Deferred()
 
@@ -91,6 +93,9 @@ insertScript = (scriptNode) ->
   document.head.appendChild(newNode)
 
   return deferred.promise()
+
+nodeInList = (node, list) ->
+  list.some((listNode) -> node.isEqualNode(listNode))
 
 updateScriptTags = (loadedAssets, fetchedAssets) ->
   oldScripts = filterForNodeType(loadedAssets, 'SCRIPT')
